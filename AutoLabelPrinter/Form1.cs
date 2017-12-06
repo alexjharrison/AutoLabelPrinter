@@ -13,16 +13,13 @@ namespace AutoLabelPrinter
 {
     public partial class Form1 : Form
     {
-        /*
-        public string boxLabelLocation = @"\\lisc-lpq01\Interfaces\LabsQ\outbound\3090\usso-boxlabel";
-        public string barcodeLabelLocation = @"\\lisc-lpq01\Interfaces\LabsQ\outbound\3090\usso-barcodelabel";
-        public string RFIDLabelLocation = @"\\lisc-lpq01\Interfaces\LabsQ\outbound\3090\usso-csvexport";
-         */
-
-        public string boxLabelLocation = @"C:\Users\harrale\Documents\usso-boxlabel";
-        public string barcodeLabelLocation = @"C:\Users\harrale\Documents\usso-barcodelabel";
-        public string RFIDLabelLocation = @"C:\Users\harrale\Documents\usso-csvexport";
-        public string CMMID;
+        
+        public string boxLabelLocation,barcodeLabelLocation,RFIDLabelLocation;
+        public string MicrohiteID, GlobalID;
+        public string GlobalCodesoftWatchFolder, MicrohiteCodesoftWatchFolder, GlobalCodesoftExeLocation, MicrohiteCodesoftExeLocation;
+        public string GlobalDruckerStationLocation, MicroHiteDruckerStationLocation;
+        public string GlobalBoxLabelPrinter, MicroHiteBoxLabelPrinter, GlobalBarcodePrinter, MicroHiteBarcodeLabelPrinter;
+        public string CMMID, CodeSoftWatchFolder, CodesoftExe, DruckerStation, BoxPrinter, BarcodePrinter;
         System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
         
 
@@ -51,8 +48,26 @@ namespace AutoLabelPrinter
 
         private void turnOn()
         {
-            if (radioGlobal.Checked == true) CMMID = "TE-59";
-            else CMMID = "TE-43";
+            readConfigFile();
+            //set specifics for codesoft watched folder and program details here
+            if (radioGlobal.Checked == true)
+            {
+                CMMID = GlobalID; 
+                CodeSoftWatchFolder = GlobalCodesoftWatchFolder; 
+                CodesoftExe = GlobalCodesoftExeLocation; 
+                DruckerStation = GlobalDruckerStationLocation; 
+                BoxPrinter = GlobalBoxLabelPrinter; 
+                BarcodePrinter = GlobalBarcodePrinter;
+            }
+            else
+            {
+                CMMID = MicrohiteID;
+                CodeSoftWatchFolder = MicrohiteCodesoftWatchFolder;
+                CodesoftExe = MicrohiteCodesoftExeLocation;
+                DruckerStation = MicroHiteDruckerStationLocation;
+                BoxPrinter = MicroHiteBoxLabelPrinter;
+                BarcodePrinter = MicroHiteBarcodeLabelPrinter;
+            }
             statusLabel.Text = "Monitoring...";
             statusLabel.BackColor = System.Drawing.Color.LightGreen;
             onOffButton.Text = "Press to Stop";
@@ -93,11 +108,36 @@ namespace AutoLabelPrinter
         
         private void printFiles(string fileToPrint)
         {
-
             
+            string batchID = fileToPrint.Substring( fileToPrint.IndexOf("usso-box-") + 9 , 6);
+            MessageBox.Show(batchID);
         }
 
-
+        private void readConfigFile()
+        {
+            string[] lines;
+            try { lines = System.IO.File.ReadAllLines("InitialConfiguration.txt"); }
+            catch { 
+                MessageBox.Show("InitialConfiguration.txt can not be found");
+                Application.Exit();
+            }
+            lines = System.IO.File.ReadAllLines("InitialConfiguration.txt");
+            boxLabelLocation = lines[1];
+            barcodeLabelLocation = lines[4];
+            RFIDLabelLocation = lines[7];
+            MicrohiteID = lines[10];
+            GlobalID = lines[13];
+            GlobalCodesoftWatchFolder = lines[16];
+            MicrohiteCodesoftWatchFolder = lines[19];
+            GlobalCodesoftExeLocation = lines[22];
+            MicrohiteCodesoftExeLocation = lines[25];
+            GlobalDruckerStationLocation = lines[28];
+            MicroHiteDruckerStationLocation = lines[31];
+            GlobalBoxLabelPrinter = lines[34];
+            MicroHiteBoxLabelPrinter = lines[37];
+            GlobalBarcodePrinter = lines[40];
+            MicroHiteBarcodeLabelPrinter = lines[43];
+        }
 
 
 
