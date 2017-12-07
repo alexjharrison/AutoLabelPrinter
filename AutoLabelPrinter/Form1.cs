@@ -8,6 +8,8 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace AutoLabelPrinter
 {
@@ -20,15 +22,21 @@ namespace AutoLabelPrinter
         public string GlobalDruckerStationLocation, MicroHiteDruckerStationLocation;
         public string GlobalBoxLabelPrinter, MicroHiteBoxLabelPrinter, GlobalBarcodePrinter, MicroHiteBarcodeLabelPrinter;
         public string CMMID, CodeSoftWatchFolder, CodesoftExe, DruckerStation, BoxPrinter, BarcodePrinter;
+        public int intervalSeconds;
         System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+        ProcessStartInfo theDruck = new ProcessStartInfo();
+        ProcessStartInfo csStart = new ProcessStartInfo();
+        
         
 
 
         public Form1()
         {
             InitializeComponent();
-            t.Interval = 5000; // specify interval time as you want
             t.Tick += new EventHandler(timer_Tick);
+            theDruck.CreateNoWindow = true;
+            theDruck.UseShellExecute = false;
+            theDruck.WindowStyle = ProcessWindowStyle.Hidden;
         }
 
         
@@ -74,7 +82,9 @@ namespace AutoLabelPrinter
             radioGlobal.AutoCheck = false;
             radioMicroHite.AutoCheck = false;
             
+            
             //timer start
+            timer_Tick(null,null);
             t.Start();
 
         }
@@ -108,13 +118,103 @@ namespace AutoLabelPrinter
         
         private void printFiles(string fileToPrint)
         {
-            
+            t.Stop();
+
+            //run codesoft if turned off
+            if(!IsCSOpen())
+            {
+                csStart.CreateNoWindow = true;
+                csStart.UseShellExecute = false;
+                csStart.WindowStyle = ProcessWindowStyle.Hidden;
+                csStart.FileName = CodesoftExe;
+                csStart.Arguments = " /CMD " + CodeSoftWatchFolder;
+                using (Process exeProcess = Process.Start(csStart))
+                    exeProcess.WaitForExit(100);
+            }
+
+
+            statusLabel.Text = "Processing Barcode/Box Labels";
             string batchID = fileToPrint.Substring( fileToPrint.IndexOf("usso-box-") + 9 , 6);
-            MessageBox.Show(batchID);
+            string[] lines = System.IO.File.ReadAllLines(fileToPrint);
+            lines[1] = BoxPrinter;
+            string fileToPrintFileNameOnly = fileToPrint.Substring(fileToPrint.LastIndexOf('\\') + 1);
+            System.IO.File.WriteAllLines(fileToPrint,lines);
+            System.IO.File.Copy(fileToPrint, boxLabelLocation + "\\archiv\\" + fileToPrintFileNameOnly);
+            System.IO.File.Move(fileToPrint, CodeSoftWatchFolder + "\\" + fileToPrintFileNameOnly);
+
+            //see if corresponding rfid file exists, loop until there
+            string rfidFiletoPrint = "";
+            while (rfidFiletoPrint=="")
+            {
+                System.Threading.Thread.Sleep(10000);
+                string[] folderContents = Directory.GetFiles(RFIDLabelLocation);
+                for (int i = 0; i < folderContents.Length; i++)
+                    if (folderContents[i].Contains(batchID))
+                        rfidFiletoPrint = (folderContents[i]);
+            }
+
+            string RFIDfileToPrintFileNameOnly = rfidFiletoPrint.Substring(rfidFiletoPrint.LastIndexOf('\\') + 1);
+            string[] rfidLines = System.IO.File.ReadAllLines(rfidFiletoPrint);
+            
+            //if zenostar process/print barcode label
+            if(rfidLines[1].Contains("ZENOSTAR"))
+            {
+                string barcodeFiletoPrint = "";
+                while (barcodeFiletoPrint == "")
+                {
+                    System.Threading.Thread.Sleep(2000);
+                    string[] barcodeFolderContents = Directory.GetFiles(barcodeLabelLocation);
+                    for (int i = 0; i < barcodeFolderContents.Length; i++)
+                        if (barcodeFolderContents[i].Contains(batchID))
+                            barcodeFiletoPrint = (barcodeFolderContents[i]);
+                }
+                string barcodeFileToPrintNameOnly = barcodeFiletoPrint.Substring(barcodeFiletoPrint.LastIndexOf('\\') + 1);
+                string[] barcodeLines = System.IO.File.ReadAllLines(barcodeFiletoPrint);
+                barcodeLines[1] = BarcodePrinter;
+                System.IO.File.WriteAllLines(barcodeFiletoPrint,barcodeLines);
+                System.IO.File.Copy(barcodeFiletoPrint, barcodeLabelLocation + "\\archiv\\" + barcodeFileToPrintNameOnly);
+                System.IO.File.Copy(barcodeFiletoPrint, CodeSoftWatchFolder + "\\" + barcodeFileToPrintNameOnly);
+            }
+
+            statusLabel.Text = "Printing RFID Labels";
+            System.IO.File.Copy(rfidFiletoPrint, RFIDLabelLocation + "\\archiv\\" + RFIDfileToPrintFileNameOnly);
+            for (int i = 1; i < rfidLines.Length; i++)
+            {
+                string[] singleRFIDtoWrite = {rfidLines[0],rfidLines[i]};
+                if (rfidLines[i].Contains("ZENOSTAR_RETAIN"))
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Wieland_CE0123_Retain.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+                else if (rfidLines[i].Contains("ZENOSTAR"))
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Wieland_CE0123.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+                else if (rfidLines[i].Contains("ZIRCAD_RETAIN"))
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Ivoclar_CE0123_retain.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+                else if (rfidLines[i].Contains("ZIRCAD"))
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Ivoclar_CE0123.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+                else if (rfidLines[i].Contains("ZIRLUX_RETAIN"))
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Zirlux FC2 With Ring_Retain.txt\" /RFID Off  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+                else if (rfidLines[i].Contains("ZIRLUX"))
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Zirlux FC2 With Ring.txt\" /RFID Off  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+
+                System.IO.File.WriteAllLines(RFIDLabelLocation + "\\TemporaryCopy.csv", singleRFIDtoWrite);
+                theDruck.FileName = DruckerStation;
+                using (Process exeProcess = Process.Start(theDruck))
+                    exeProcess.WaitForExit();
+                
+
+
+
+            }
+            System.IO.File.Delete(RFIDLabelLocation + "\\TemporaryCopy.csv");
+            System.IO.File.Delete(rfidFiletoPrint);
+
+
+
+            statusLabel.Text = "Monitoring...";
+            t.Start();
         }
 
         private void readConfigFile()
         {
+            
             string[] lines;
             try { lines = System.IO.File.ReadAllLines("InitialConfiguration.txt"); }
             catch { 
@@ -137,9 +237,12 @@ namespace AutoLabelPrinter
             MicroHiteBoxLabelPrinter = lines[37];
             GlobalBarcodePrinter = lines[40];
             MicroHiteBarcodeLabelPrinter = lines[43];
+            intervalSeconds = Convert.ToInt32(lines[46]);
+
+            t.Interval = intervalSeconds * 1000; // specify interval time as you want
         }
 
-
+        
 
 
         private void label4_DoubleClick(object sender, EventArgs e)
@@ -148,6 +251,17 @@ namespace AutoLabelPrinter
             squak.Show();
 
         }
+
+        public bool IsCSOpen()
+        {
+            foreach (Process clsProcess in Process.GetProcesses())
+                if (clsProcess.ProcessName==("CS"))
+                    return true;
+            return false;
+        } 
+
+        [DllImport("User32")]
+        private static extern int ShowWindow(int hwnd, int nCmdShow);
         
     }
 }
