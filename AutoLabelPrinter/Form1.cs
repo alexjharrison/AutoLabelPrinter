@@ -188,7 +188,7 @@ namespace AutoLabelPrinter
 
             statusLabel.Text = "Printing RFID Labels";
             string firstDisc = rfidLines[1].Substring(rfidLines[1].IndexOf(batchID) + 7, 3);
-            string lastDisc = rfidLines[1].Substring(rfidLines[rfidLines.Length - 1].IndexOf(batchID) + 7, 3);
+            string lastDisc = rfidLines[rfidLines.Length - 1].Substring(rfidLines[rfidLines.Length - 1].IndexOf(batchID) + 7, 3);
             System.IO.File.Copy(rfidFiletoPrint, RFIDLabelLocation + "\\archiv\\" + RFIDfileToPrintFileNameOnly.Substring(0,RFIDfileToPrintFileNameOnly.Length-4) + " #" + firstDisc + "-" + lastDisc + ".csv",true);
             for (int i = 1; i < rfidLines.Length; i++)
             {
