@@ -23,6 +23,7 @@ namespace AutoLabelPrinter
         public string GlobalBoxLabelPrinter, MicroHiteBoxLabelPrinter, GlobalBarcodePrinter, MicroHiteBarcodeLabelPrinter;
         public string CMMID, CodeSoftWatchFolder, CodesoftExe, DruckerStation, BoxPrinter, BarcodePrinter;
         public string CodesoftLabelTemplatesLocationGlobal, CodesoftLabelTemplatesLocationMicrohite, CodesoftLabelTemplateLocation;
+        public string WeightsFileLocation;
         public int intervalSeconds;
         System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
         ProcessStartInfo theDruck = new ProcessStartInfo();
@@ -37,7 +38,7 @@ namespace AutoLabelPrinter
             t.Tick += new EventHandler(timer_Tick);
             theDruck.CreateNoWindow = true;
             theDruck.UseShellExecute = false;
-            theDruck.WindowStyle = ProcessWindowStyle.Hidden;
+            theDruck.WindowStyle = ProcessWindowStyle.Normal;
         }
 
         
@@ -146,7 +147,8 @@ namespace AutoLabelPrinter
             string fileToPrintFileNameOnly = fileToPrint.Substring(fileToPrint.LastIndexOf('\\') + 1);
             System.IO.File.WriteAllLines(fileToPrint,lines);
             System.IO.File.Copy(fileToPrint, boxLabelLocation + "\\archiv\\" + fileToPrintFileNameOnly,true);
-            System.IO.File.Move(fileToPrint, CodeSoftWatchFolder + "\\" + fileToPrintFileNameOnly);
+            System.IO.File.Copy(fileToPrint, CodeSoftWatchFolder + "\\" + fileToPrintFileNameOnly,true);
+            System.IO.File.Delete(fileToPrint);
 
             //see if corresponding rfid file exists, loop until there
             string rfidFiletoPrint = "";
@@ -161,7 +163,7 @@ namespace AutoLabelPrinter
 
             string RFIDfileToPrintFileNameOnly = rfidFiletoPrint.Substring(rfidFiletoPrint.LastIndexOf('\\') + 1);
             string[] rfidLines = System.IO.File.ReadAllLines(rfidFiletoPrint);
-            
+            string[] barcodeLines = {""};
             //if zenostar process/print barcode label
             if(rfidLines[1].Contains("ZENOSTAR"))
             {
@@ -175,7 +177,7 @@ namespace AutoLabelPrinter
                             barcodeFiletoPrint = (barcodeFolderContents[i]);
                 }
                 string barcodeFileToPrintNameOnly = barcodeFiletoPrint.Substring(barcodeFiletoPrint.LastIndexOf('\\') + 1);
-                string[] barcodeLines = System.IO.File.ReadAllLines(barcodeFiletoPrint);
+                barcodeLines = System.IO.File.ReadAllLines(barcodeFiletoPrint);
                 barcodeLines[1] = BarcodePrinter;
 
                 string labelTemplate2 = barcodeLines[0].Substring(barcodeLines[0].LastIndexOf('\\') + 1);
@@ -183,13 +185,15 @@ namespace AutoLabelPrinter
 
                 System.IO.File.WriteAllLines(barcodeFiletoPrint,barcodeLines);
                 System.IO.File.Copy(barcodeFiletoPrint, barcodeLabelLocation + "\\archiv\\" + barcodeFileToPrintNameOnly,true);
-                System.IO.File.Move(barcodeFiletoPrint, CodeSoftWatchFolder + "\\" + barcodeFileToPrintNameOnly);
+                System.IO.File.Copy(barcodeFiletoPrint, CodeSoftWatchFolder + "\\" + barcodeFileToPrintNameOnly,true);
+                System.IO.File.Delete(barcodeFiletoPrint);
             }
 
             statusLabel.Text = "Printing RFID Labels";
             string firstDisc = rfidLines[1].Substring(rfidLines[1].IndexOf(batchID) + 7, 3);
             string lastDisc = rfidLines[rfidLines.Length - 1].Substring(rfidLines[rfidLines.Length - 1].IndexOf(batchID) + 7, 3);
             System.IO.File.Copy(rfidFiletoPrint, RFIDLabelLocation + "\\archiv\\" + RFIDfileToPrintFileNameOnly.Substring(0,RFIDfileToPrintFileNameOnly.Length-4) + " #" + firstDisc + "-" + lastDisc + ".csv",true);
+            string batchSize = GetBatchSize(batchID);
             for (int i = 1; i < rfidLines.Length; i++)
             {
                 string[] singleRFIDtoWrite = {rfidLines[0],rfidLines[i]};
@@ -198,7 +202,7 @@ namespace AutoLabelPrinter
                 else if (rfidLines[i].Contains("ZENOSTAR"))
                     theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Wieland_CE0123.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
                 else if (rfidLines[i].Contains("ZIRCAD_RETAIN"))
-                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Ivoclar_CE0123_retain.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
+                    theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Ivoclar_CE0123_Retain.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
                 else if (rfidLines[i].Contains("ZIRCAD"))
                     theDruck.Arguments = " /P \"G:\\Prod_Labels\\Zirconia\\RFID Labels\\Microhite\\Ivoclar_CE0123.txt\" /RFID On  /B \"" + RFIDLabelLocation + "\\TemporaryCopy.csv\"  /start /hidden";
                 else if (rfidLines[i].Contains("ZIRLUX_RETAIN"))
@@ -210,9 +214,22 @@ namespace AutoLabelPrinter
                 theDruck.FileName = DruckerStation;
                 using (Process exeProcess = Process.Start(theDruck))
                     exeProcess.WaitForExit();
+
+                //if first or last print extra label
+                if (((i == 1) && (Convert.ToInt32(firstDisc) == 1)) || (i == rfidLines.Length - 1) && (Convert.ToInt32(lastDisc) == Convert.ToInt32(batchSize)))
+                {
+                    lines[6] = "\"LABELQUANTITY = \"1\"";
+                    System.IO.File.WriteAllLines(CodeSoftWatchFolder + "\\printonemoreboxlabel.cmd" , lines);
+                    if (rfidLines[1].Contains("ZENOSTAR"))
+                    {
+                        barcodeLines[6] = "\"LABELQUANTITY = \"1\"";
+                        System.IO.File.WriteAllLines(CodeSoftWatchFolder + "\\printonemorebarcodelabel.cmd",barcodeLines);
+                    }
+
+                    using (Process exeProcess = Process.Start(theDruck))
+                        exeProcess.WaitForExit();
+                }
                 
-
-
 
             }
             
@@ -253,6 +270,7 @@ namespace AutoLabelPrinter
             intervalSeconds = Convert.ToInt32(lines[46]);
             CodesoftLabelTemplatesLocationGlobal = lines[49];
             CodesoftLabelTemplatesLocationMicrohite = lines[52];
+            WeightsFileLocation = lines[55];
 
             t.Interval = intervalSeconds * 1000; // specify interval time as you want
         }
@@ -274,6 +292,26 @@ namespace AutoLabelPrinter
                     return true;
             return false;
         } 
+
+        public string GetBatchSize(string batchID)
+        {
+            string lastNum = "";
+            string[] folderContents = Directory.GetFiles(WeightsFileLocation);
+            for (int i = 0; i < folderContents.Length; i++)
+                if ((folderContents[i].Contains(batchID))&&(folderContents[i].Contains("Weights")))
+                {
+                    File.Copy(folderContents[i], folderContents[i] + "copy.csv");
+                    string[] weightsLines = System.IO.File.ReadAllLines(folderContents[i] + "copy.csv");
+                    File.Delete(folderContents[i] + "copy.csv");
+                    lastNum = weightsLines[0].Split(',')[3];
+                    if (lastNum.Length == 1)
+                        lastNum = "00" + lastNum;
+                    else if (lastNum.Length == 2)
+                        lastNum = "0" + lastNum;
+                    i = folderContents.Length;
+                }
+            return lastNum;
+        }
 
         
     }
